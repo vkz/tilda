@@ -204,8 +204,54 @@
 
   (check-true (~> '(0 1 2)
                   #:with (list a b c) ~
-                  (equal? ~ (list a b c)))))
+                  (equal? ~ (list a b c))))
 
+  ;; bound ~id is not treated as a hole so isn't replaced
+  (check-equal? '(6 1) (let ((~foo 1))
+                         (list (~> 2
+                                   #:with (list a b) (list ~foo ~)
+                                   (+ ~foo ~ a b))
+                               ~foo)))
+
+  ;; scoping rules work as expected
+  (check-equal? '(42 1) (let ((~foo 1))
+                          (list (~> 0
+                                    #:with ~foo 42
+                                    (+ ~foo ~))
+                                ~foo))))
+
+;; TODO Consider #:as id option that simply binds id to ~? We can simply rewrite
+;; it into #:with id ~.
+
+;; TODO I have no immediate use for short circuiting ~> i.e. one that returns #f
+;; whenever a clause returns #f, but its implementation could desugar into:
+(example
+ (~> '(1 3 5)
+     #:do ((unless ~ (<~ #f)))
+     (findf even? ~)
+     #:do ((unless ~ (<~ #f)))
+     (* 2 ~))
+ ;; example
+ )
+
+;; TODO define~> and λ~> idea
+(example
+ (define~> (even*2 from ~upto)
+   (range from ~)
+   (filter odd?  ~)
+   (findf even? ~)
+   #:do ((unless ~num (<~ #f)))
+   (* 2 ~))
+
+ (define even*2 (λ (from . ~rest)
+                  (car ~)
+                  (range from ~upto)
+                  (filter odd?  ~)
+                  (findf even? ~)
+                  #:do ((unless ~num (<~ #f)))
+                  (* 2 ~)))
+ ;; example
+ )
 
 ;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
 ;; need them, though. Only decent syntactic solution I can think of is to have
