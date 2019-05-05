@@ -1,58 +1,16 @@
 #lang racket
 
 (provide ~>)
-
 (require (for-syntax syntax/parse
                      syntax/keyword
                      racket/match))
+
 
 (define-syntax-rule (comment . any) (void))
 (define-syntax-rule (example . any) (void))
 (begin-for-syntax
   (define-syntax-rule (comment . any) (void))
   (define-syntax-rule (example . any) (void)))
-
-;; TODO Split ~> into separate package either the same prelude collection, so it
-;; is required as prelude/tilda and also reprovide ~> from prelude or maybe a
-;; separate tilda collection? Document it with scribble. Pull it into prelude
-;; proper and tables as needed.
-
-;; TODO Ask mailing list to review and improve.
-
-;; TODO easy to implement standard ~> and ~>> in terms of my ~> below, not sure I
-;; really need them, though. Only decent syntactic solution I can think of is to
-;; have three macros: ~ ~> ~>>, but then how do I tell ~ as a hole from everything
-;; else? Use _ instead maybe?
-
-;; TODO make ~ available in #:with and #:do. Here's my current idea. I can't
-;; merily "temprarily" bind ~ say in rhs of #:with or #:do body, because, well
-;; they could be using ~> inside, too. But more importantly, think what we're
-;; doing here. ~ and friends are nothing but markers to be replaced during macro
-;; expansion as needed. So, it isn't right to just treat ~ as nothing but a marker
-;; sometimes but as a binding other times. I say we need to be consistent:
-;;
-;; #:do treat its body "as if" it's just a sequence of ~> clauses, replacing ~
-;;      with its current expr (val) only inside outer most clause parens, just
-;;      like we do in normal ~> clause. One nice pattern emerges: if you want to
-;;      use current ~ value in the rest of the body simply bind it at the top of
-;;      the body e.g. ((define cur ~) . body)
-;;
-;; #:with treat its rhs exactly like ~> clause similarly only replace ~ at the top
-;;        level. Allow one special case when ~ or ~id is the entire rhs. Naturally
-;;        I am thinking about allowing lhs to be a match pattern, with the whole
-;;        thing transformed into a (match-define lhs rhs).
-;;
-;; I think the following example should now work as expected:
-(example
- (~> 0
-     (sub1 ~)
-     (define val ex)
-     #:with foo (pre .. ~ post ..)
-     (add1 ~)
-     #:do ((define bar ~))
-     (list foo bar ~))
- ;; example
- )
 
 
 (define-for-syntax (fix-outer/ctx ctx stx [loc #f])
@@ -88,6 +46,17 @@
              #:with (post ...) #'()
              #:attr hole #f))
 
+  (define-syntax-class (do-expr val)
+    (pattern c:clause #:when (attribute c.hole)
+             #:with val val
+             #:with subst (fix-outer/ctx #'c #'(c.pre ... val c.post ...) #'c))
+    (pattern e
+             #:with subst #'e))
+
+  (define-syntax-class (with-rhs val)
+    (pattern id:~ #:with subst (fix-outer/ctx val val #'id))
+    (pattern (~var e (do-expr val)) #:with subst #'e.subst))
+
   (define kw-table
     (list (list '#:guard check-expression)
           (list '#:do check-expression)
@@ -96,13 +65,15 @@
   (define (options->syntaxes prev-clause value options)
     (for/list ((opt (in-list options)))
       (match opt
-        ((list #:with ctx id e)
-         (with-syntax ((id id) (e e))
-           (fix-outer/ctx ctx #'(define id e) ctx)))
+
+        ((list #:with ctx sym e)
+         (define/syntax-parse id:id sym)
+         (define/syntax-parse (~var rhs (with-rhs value)) e)
+         (fix-outer/ctx ctx #'(define id rhs.subst) ctx))
 
         ((list #:do ctx body)
-         (define/syntax-parse (e:expr ...) body)
-         (fix-outer/ctx ctx #'(begin e ...) ctx))
+         (define/syntax-parse ((~var e (do-expr value)) ...) body)
+         (fix-outer/ctx ctx #'(begin e.subst ...) ctx))
 
         ;; TODO I'm really hating this, either make error message helpful e.g. by
         ;; installing a contract boundary between clauses or ditch this thing. See
@@ -124,7 +95,8 @@
     ((_ e:expr (~peek _:keyword) . rest)
      #:do ((define-values (options clauses)
              (parse-keyword-options #'rest kw-table
-                                    #:context this-syntax)))
+                                    ;; replace impl~> with ~> for better errors
+                                    #:context #'(~> e . rest))))
      #:with (clause ...) clauses
      #:with body (fix-outer/ctx this-syntax #'(impl~> val clause ...) this-syntax)
      #:with (options ...) (datum->syntax this-syntax (options->syntaxes #'e #'val options) this-syntax)
@@ -173,6 +145,9 @@
                   (format ":~a" ~str)
                   (string->symbol ~))))
 
+  (check-eq? 0 (~> 0))
+  (check-eq? 0 (~> 0 #:do ()))
+
   ;; ensure macro introduced val doesn't capture outside val
   (check-eq? (let ((val 0))
                (~> val
@@ -199,4 +174,32 @@
                  #:do ((define bar 42)
                        (<~ bar))
                  (list bar ~))
-             42))
+             42)
+
+  (check-equal? '(0 1 2) (~> 0
+                             #:do ((define foo ~))
+                             (add1 ~)
+                             #:do ((define bar ~))
+                             (add1 ~)
+                             (list foo bar ~)))
+
+  (check-equal? '(1 1 2 1) (~> 0
+                               (add1 ~)
+                               #:do ((define foo ~)
+                                     42
+                                     (define bar ~)
+                                     (define baz (add1 foo)))
+                               (list foo bar baz ~)))
+
+  (check-equal? '(0 0 2) (~> 0
+                             #:with foo ~
+                             (add1 ~)
+                             #:with bar (sub1 ~)
+                             (add1 ~)
+                             (list foo bar ~))))
+
+
+;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
+;; need them, though. Only decent syntactic solution I can think of is to have
+;; three macros: ~ ~> ~>>, but then how do I tell ~ as a hole from everything
+;; else? Use _ instead maybe?
