@@ -67,16 +67,16 @@
   (define kw-table
     (list (list '#:guard check-expression)
           (list '#:do check-expression)
-          (list '#:with check-identifier check-expression)))
+          (list '#:with check-expression check-expression)))
 
   (define (options->syntaxes prev-clause value options)
     (for/list ((opt (in-list options)))
       (match opt
 
-        ((list #:with ctx sym e)
-         (define/syntax-parse id:id sym)
+        ((list #:with ctx p e)
+         (define/syntax-parse pat p)
          (define/syntax-parse (~var rhs (with-rhs value)) e)
-         (fix-outer/ctx ctx #'(define id rhs.subst)))
+         (fix-outer/ctx ctx #'(match-define pat rhs.subst)))
 
         ((list #:do ctx body)
          (define/syntax-parse ((~var e (do-expr value)) ...) body)
@@ -200,7 +200,11 @@
                              (add1 ~)
                              #:with bar (sub1 ~)
                              (add1 ~)
-                             (list foo bar ~))))
+                             (list foo bar ~)))
+
+  (check-true (~> '(0 1 2)
+                  #:with (list a b c) ~
+                  (equal? ~ (list a b c)))))
 
 
 ;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
