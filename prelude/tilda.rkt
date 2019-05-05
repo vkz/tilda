@@ -13,15 +13,22 @@
   (define-syntax-rule (example . any) (void)))
 
 
-(define-for-syntax (fix-outer/ctx ctx stx [loc #f])
-  (datum->syntax ctx (syntax-e stx) loc))
+(begin-for-syntax
+  (require (for-syntax racket/base))
+  (define-syntax (fix-outer/ctx stx)
+    (syntax-case stx ()
+      ((_ ctx stxe srcloc) #'(datum->syntax ctx (syntax-e stxe) srcloc))
+      ((_ ctx stxe)        #'(fix-outer/ctx ctx stxe ctx))
+      ;; HACK assumes being called from inside syntax-parse
+      ((_ stxe)            (with-syntax ((ctx (datum->syntax stx #'this-syntax)))
+                             #'(fix-outer/ctx ctx stxe ctx))))))
 
 
 (define-syntax ~>
   (syntax-parser
     ((_ clauses ...)
      #:with <~ (datum->syntax this-syntax '<~)
-     #:with body (fix-outer/ctx this-syntax #'(impl~> clauses ...) this-syntax)
+     #:with body (fix-outer/ctx #'(impl~> clauses ...))
      #'(let/ec <~ body))))
 
 
@@ -49,7 +56,7 @@
   (define-syntax-class (do-expr val)
     (pattern c:clause #:when (attribute c.hole)
              #:with val val
-             #:with subst (fix-outer/ctx #'c #'(c.pre ... val c.post ...) #'c))
+             #:with subst (fix-outer/ctx #'c #'(c.pre ... val c.post ...)))
     (pattern e
              #:with subst #'e))
 
@@ -69,11 +76,11 @@
         ((list #:with ctx sym e)
          (define/syntax-parse id:id sym)
          (define/syntax-parse (~var rhs (with-rhs value)) e)
-         (fix-outer/ctx ctx #'(define id rhs.subst) ctx))
+         (fix-outer/ctx ctx #'(define id rhs.subst)))
 
         ((list #:do ctx body)
          (define/syntax-parse ((~var e (do-expr value)) ...) body)
-         (fix-outer/ctx ctx #'(begin e.subst ...) ctx))
+         (fix-outer/ctx ctx #'(begin e.subst ...)))
 
         ;; TODO I'm really hating this, either make error message helpful e.g. by
         ;; installing a contract boundary between clauses or ditch this thing. See
@@ -81,7 +88,7 @@
         ;; to fix blame object somehow. Are guards even useful here?
         ((list #:guard ctx guard)
          (with-syntax ((error (fix-outer/ctx ctx #`(error "guard failed") prev-clause)))
-           (fix-outer/ctx guard #`(unless (#,guard #,value) error) guard)))
+           (fix-outer/ctx guard #`(unless (#,guard #,value) error))))
 
         ((list-rest kw ctx _)
          (raise-syntax-error #f (format "unexpected keyword ~a" kw) ctx ctx)))))
@@ -93,30 +100,27 @@
 
     ;; keyword options before the next clause
     ((_ e:expr (~peek _:keyword) . rest)
-     #:do ((define-values (options clauses)
-             (parse-keyword-options #'rest kw-table
-                                    ;; replace impl~> with ~> for better errors
-                                    #:context #'(~> e . rest))))
+     #:do ((define-values (options clauses) (parse-keyword-options
+                                             #'rest kw-table
+                                             ;; report errors in terms of ~>
+                                             #:context #'(~> e . rest))))
      #:with (clause ...) clauses
-     #:with body (fix-outer/ctx this-syntax #'(impl~> val clause ...) this-syntax)
-     #:with (options ...) (datum->syntax this-syntax (options->syntaxes #'e #'val options) this-syntax)
-     (fix-outer/ctx this-syntax
-                    #'(begin (define val e) options ... body)
-                    this-syntax))
+     #:with body (fix-outer/ctx #'(impl~> val clause ...))
+     #:with (options ...) (datum->syntax this-syntax (options->syntaxes #'e #'val options)
+                                         this-syntax)
+     (fix-outer/ctx #'(begin (define val e) options ... body)))
 
-    ;; clause with hole
+    ;; clause with a hole
     ((_ e:expr c:clause rest ...)
      #:when (attribute c.hole)
      #:with clause/e (fix-outer/ctx this-syntax #'(c.pre ... e c.post ...) #'c)
-     (fix-outer/ctx this-syntax #'(impl~> clause/e rest ...) this-syntax))
+     (fix-outer/ctx #'(impl~> clause/e rest ...)))
 
-    ;; clause with no hole
+    ;; clause with no holes
     ((_ e:expr c:clause rest ...)
      #:when (not (attribute c.hole))
      #:with clause (fix-outer/ctx this-syntax #'(c.pre ... c.post ...) #'c)
-     (fix-outer/ctx this-syntax
-                    #'(begin e (impl~> clause rest ...))
-                    this-syntax))))
+     (fix-outer/ctx #'(begin e (impl~> clause rest ...))))))
 
 
 (module+ test
