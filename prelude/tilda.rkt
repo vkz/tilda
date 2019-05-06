@@ -1,8 +1,16 @@
 #lang racket
 
-(provide ~>)
+
+;;* Provides -------------------------------------------------------- *;;
+
+
+(provide ~> define~> lambda~>
+         (rename-out [lambda~> λ~>]))
+
+
 (require (for-syntax syntax/parse
                      syntax/keyword
+                     syntax/parse/lib/function-header
                      racket/match))
 
 
@@ -264,24 +272,73 @@
                            (list num ~))))
 
 
-;; TODO define~> and λ~> idea
-(example
- (define~> (even*2 from ~upto)
-   (range from ~)
-   (filter odd?  ~)
-   (findf even? ~)
-   #:do ((unless ~num (<~ #f)))
-   (* 2 ~))
+;;* define~> and lambda~> ------------------------------------------- *;;
 
- (define even*2 (λ (from . ~rest)
-                  (car ~)
-                  (range from ~upto)
-                  (filter odd?  ~)
-                  (findf even? ~)
-                  #:do ((unless ~num (<~ #f)))
-                  (* 2 ~)))
- ;; example
- )
+
+(define-for-syntax (hole-bound-error name ctx)
+  (raise-syntax-error
+   name (format "~a, ~a" "attempt to bind hole-marker ~ "
+                "consider using a meaningful ~id as parameter instead")
+   ctx ctx))
+
+
+(define-syntax define~>
+  (syntax-parser
+    ;; TODO Unsatisfied by this solution. IMO the right approach would be to make
+    ;; ~ unbound so it can be used as a marker in the body, sadly I don't yet know
+    ;; how to manipulate scopes appropriately.
+    ((_ header:function-header clause ...)
+     #:with (_ ... param:~ _ ...) #'header.params
+     #:when (eq? (syntax-e #'param) '~)
+     (hole-bound-error 'define~> #'param))
+
+    ((_ header:function-header clause ...)
+     #:with (_ ... param:~ _ ...) #'header.params
+     #'(define header (~> param clause ...)))))
+
+
+(define-syntax lambda~>
+  (syntax-parser
+    ((_ header:formals clause ...)
+     #:with (_ ... param:~ _ ...) #'header.params
+     #:when (eq? (syntax-e #'param) '~)
+     (hole-bound-error 'lambda~> #'param))
+
+    ((_ header:formals clause ...)
+     #:with (_ ... param:~ _ ...) #'header.params
+     #'(lambda header (~> param clause ...)))))
+
+
+(module+ test
+  (require syntax/macro-testing)
+
+  (define~> ((foo~> . ~arg) b #:c [c 3])
+    (list* b c ~)
+    #:as all
+    (last ~)
+    #:when (even? ~) (<~ 'even)
+    (+ ~ (car all)))
+
+  (check-eq? ((foo~> 0 1) 2 #:c 3) 3)
+  (check-eq? ((foo~> 0 1) 2) 3)
+  (check-eq? ((foo~> 0 2) 3) 'even)
+
+  (check-exn #rx"attempt to bind hole-marker"
+             (thunk
+              (convert-compile-time-error
+               (define~> ((foo . ~) b c)
+                 (list* b c ~)
+                 (car ~)
+                 (add1 ~)))))
+
+  (check-exn #rx"attempt to bind hole-marker"
+             (thunk
+              (convert-compile-time-error
+               (lambda~> ~ (car ~)))))
+
+  (check-eq? ((lambda~> (a b . ~rest) (map add1 ~) (list* ~) (last ~)) 1 2 3 4) 5)
+  (check-eq? ((lambda~> ~args (cdr ~) (last ~)) 1 2 3) 3))
+
 
 ;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
 ;; need them, though. Only decent syntactic solution I can think of is to have
