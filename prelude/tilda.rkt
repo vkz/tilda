@@ -67,11 +67,17 @@
   (define kw-table
     (list (list '#:guard check-expression)
           (list '#:do check-expression)
-          (list '#:with check-expression check-expression)))
+          (list '#:with check-expression check-expression)
+          (list '#:as check-expression)))
 
   (define (options->syntaxes prev-clause value options)
     (for/list ((opt (in-list options)))
       (match opt
+
+        ((list #:as ctx p)
+         (define/syntax-parse pat p)
+         (define/syntax-parse rhs value)
+         (fix-outer/ctx ctx #'(match-define pat rhs)))
 
         ((list #:with ctx p e)
          (define/syntax-parse pat p)
@@ -218,21 +224,18 @@
                           (list (~> 0
                                     #:with ~foo 42
                                     (+ ~foo ~))
-                                ~foo))))
+                                ~foo)))
 
-;; TODO Consider #:as id option that simply binds id to ~? We can simply rewrite
-;; it into #:with id ~.
+  ;; #:as and short-circuit with or
+  (check-equal? (list 6 (range 1 6)) (~> 6
+                                         #:as upper-limit
+                                         (range 1 ~)
+                                         #:as seq
+                                         (filter odd?  ~)
+                                         (findf even? ~)
+                                         (or ~num (<~ (list upper-limit seq)))
+                                         (* 2 ~))))
 
-;; TODO I have no immediate use for short circuiting ~> i.e. one that returns #f
-;; whenever a clause returns #f, but its implementation could desugar into:
-(example
- (~> '(1 3 5)
-     #:do ((unless ~ (<~ #f)))
-     (findf even? ~)
-     #:do ((unless ~ (<~ #f)))
-     (* 2 ~))
- ;; example
- )
 
 ;; TODO define~> and λ~> idea
 (example
