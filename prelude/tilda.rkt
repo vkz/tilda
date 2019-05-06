@@ -21,18 +21,7 @@
       ((_ ctx stxe)        #'(fix-outer/ctx ctx stxe ctx))
       ;; HACK assumes being called from inside syntax-parse
       ((_ stxe)            (with-syntax ((ctx (datum->syntax stx #'this-syntax)))
-                             #'(fix-outer/ctx ctx stxe ctx))))))
-
-
-(define-syntax ~>
-  (syntax-parser
-    ((_ clauses ...)
-     #:with <~ (datum->syntax this-syntax '<~)
-     #:with body (fix-outer/ctx #'(impl~> clauses ...))
-     #'(let/ec <~ body))))
-
-
-(define-syntax (impl~> stx)
+                             #'(fix-outer/ctx ctx stxe ctx)))))
 
   (define (unbound? stx)
     (define top-level-or-unbound (not (identifier-binding stx)))
@@ -44,7 +33,21 @@
     (regexp-match #px"^~" (symbol->string (syntax-e stx))))
 
   (define-syntax-class ~
-    (pattern id:id #:when (and (~id? #'id) (unbound? #'id))))
+    (pattern id:id #:when (and (~id? #'id) (unbound? #'id)))))
+
+
+;;* ~> -------------------------------------------------------------- *;;
+
+
+(define-syntax ~>
+  (syntax-parser
+    ((_ clauses ...)
+     #:with <~ (syntax-local-introduce #'<~)
+     #:with body (fix-outer/ctx #'(impl~> clauses ...))
+     #'(let/ec <~ body))))
+
+
+(define-syntax (impl~> stx)
 
   (define-syntax-class clause
     #:attributes ((pre 1) hole (post 1))
