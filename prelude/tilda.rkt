@@ -67,13 +67,15 @@
   (define kw-table
     (list (list '#:guard check-expression)
           (list '#:do check-expression)
+          (list '#:when check-expression check-expression)
+          (list '#:unless check-expression check-expression)
           (list '#:with check-expression check-expression)
           (list '#:as check-expression)))
 
   (define (options->syntaxes prev-clause value options)
-    (for/list ((opt (in-list options)))
-      (match opt
 
+    (define opt->stx
+      (match-lambda
         ((list #:as ctx p)
          (define/syntax-parse pat p)
          (define/syntax-parse rhs value)
@@ -88,6 +90,16 @@
          (define/syntax-parse ((~var e (do-expr value)) ...) body)
          (fix-outer/ctx ctx #'(begin e.subst ...)))
 
+        ((list #:when ctx lhs rhs)
+         (define/syntax-parse (~var test (with-rhs value)) lhs)
+         (define/syntax-parse (~var consequent (with-rhs value)) rhs)
+         (fix-outer/ctx ctx #'(when test.subst consequent.subst)))
+
+        ((list #:unless ctx lhs rhs)
+         (define/syntax-parse (~var test (with-rhs value)) lhs)
+         (define/syntax-parse (~var consequent (with-rhs value)) rhs)
+         (fix-outer/ctx ctx #'(unless test.subst consequent.subst)))
+
         ;; TODO I'm really hating this, either make error message helpful e.g. by
         ;; installing a contract boundary between clauses or ditch this thing. See
         ;; with-contract, invariant-assertion or maybe define/contract. I'd have
@@ -97,7 +109,10 @@
            (fix-outer/ctx guard #`(unless (#,guard #,value) error))))
 
         ((list-rest kw ctx _)
-         (raise-syntax-error #f (format "unexpected keyword ~a" kw) ctx ctx)))))
+         (raise-syntax-error #f (format "unexpected keyword ~a" kw) ctx ctx))))
+
+    (for/list ((opt (in-list options)))
+      (opt->stx opt)))
 
   (syntax-parse stx
 
@@ -234,7 +249,16 @@
                                          (filter odd?  ~)
                                          (findf even? ~)
                                          (or ~num (<~ (list upper-limit seq)))
-                                         (* 2 ~))))
+                                         (* 2 ~)))
+
+  (check-eq? 6 (~> 6
+                   #:unless (odd? ~) (<~ ~)
+                   (range 1 ~)))
+
+  (check-equal? '(5 6) (~> 6
+                           #:as num
+                           #:when (even? ~) (set! num (sub1 num))
+                           (list num ~))))
 
 
 ;; TODO define~> and λ~> idea
