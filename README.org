@@ -1,5 +1,7 @@
 * Motivation
 
+[[#examples][Skip to Examples]]
+
 ~tilda~ package implements the so called *threading* macro that simply lets you
 compose function invocations left-to-right from the first one to compute, then the
 next one that uses the result from the first, and so on. Contrast this with the
@@ -84,9 +86,18 @@ also easily send pull requests via Github interface.
 You can also do the entire clone, install, link dance in one go by passing
 ~--clone~ to ~raco~. Please consult [[https://docs.racket-lang.org/pkg/git-workflow.html][the docs here]].
 
-* Examples
+#+begin_quote
+Knowing that in no way this README can replace proper Racket documentation I
+kindly ask the reader to make do for the time being as I learn how to scribble my
+way to perfection. Apologies.
+#+end_quote
 
-** ~~>~ macro
+* Examples
+:PROPERTIES:
+:CUSTOM_ID: examples
+:END:
+
+** _~>_ macro
 
 #+begin_example
 
@@ -98,13 +109,13 @@ You can also do the entire clone, install, link dance in one go by passing
 
          hole = ~
               |~id
- 	 	 	 	 
+
 thread-option = #:with pat expr/hole
- 	 	  | #:do (expr/hole ...)
- 	 	  | #:as id
- 	 	  | #:when expr/hole expr/hole
- 	 	  | #:unless expr/hole expr/hole
- 	 	 	 	 
+              | #:do (expr/hole ...)
+              | #:as id
+              | #:when expr/hole expr/hole
+              | #:unless expr/hole expr/hole
+
     expr/hole = (pre-expr ... hole post-expr ...)
               | (expr ...)
               | expr
@@ -115,7 +126,7 @@ Every clause must be wrapped in parenthesis and explicit hole-marker needs to be
 supplied unless you want to ignore the result of the previous clause, which you
 can do. Omitting a hole amounts to starting to thread from the current clause,
 however any bindings created with keyword /thread-options/ would persist for the
-dynamic extent of the entire ~~>~ computation.
+dynamic extent of the entire _~>_ computation.
 
 #+begin_src racket
   (require prelude/tilda
@@ -137,12 +148,12 @@ dynamic extent of the entire ~~>~ computation.
 #+end_src
 
 Notice, that any unbound identifier that starts with tilda can be a hole-marker,
-so you can use either ~~~ or e.g. ~~key~ interchangably, with the latter simply
+so you can use either _~_ or e.g. _~key_ interchangably, with the latter simply
 hinting to the reader of your code what sort of thing it's supposed to be, making
 hole-markers essentially self-documenting.
 
 You can interleave clauses with /thread-options/ that let you perform and bind
-intermediate computations so that you may avoid having to split you /thread/ just
+intermediate computations so that you may avoid having to split your /thread/ just
 to ~let~-bind something. This is of course nothing new to someone who's used
 beautiful ~syntax-parse~ and friends:
 
@@ -179,7 +190,7 @@ beautiful ~syntax-parse~ and friends:
                            (list num ~)))
 #+end_src
 
-~~>~ is implicitly wrapped in an escape continuation bound to ~<~~, so you can cut
+_~>_ is implicitly wrapped in an escape continuation bound to _<~_, so you can cut
 your thread short at any time and return any intermediate result:
 
 #+begin_src racket
@@ -198,12 +209,12 @@ your thread short at any time and return any intermediate result:
                                          (* 2 ~)))
 #+end_src
 
-** ~define~>~ and ~lambda~>~ macros
+** _define~>_ and _lambda~>_ macros
 
 ~define~>~ lets you define functions whose body effectively threads whatever
 formal argument you specify as a hole-marker. Otherwise the grammar for its formal
 parameters is exactly that of Racket's ~define~. Note, however, that you may not
-use ~~~ as a formal parameter, that is because hole-markers are required to be
+use _~_ as a formal parameter, that is because hole-markers are required to be
 unbound but of course the whole point of function parameters is to bind them in
 the body:
 
@@ -233,9 +244,8 @@ the body:
 #+end_src
 
 #+begin_quote
-Being unable to use ~~~ as a formal parameter above is somewhat unsatisfying. I
+Being unable to use _~_ as a formal parameter above is somewhat unsatisfying. I
 could remedy that if I knew how to temporarily /disable/ its binding for the
 dynamic extent of the body, which, I believe, should be possible by manipulating
 its set of scopes. If you happen to know how to do this in Racket, do tell.
 #+end_quote
-
