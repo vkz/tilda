@@ -68,7 +68,7 @@ that is in heavy development atm and has not been released, yet. Once ~prelude~ 
 in good enough shape to be published ~tilda~ may or may not remain a separate
 package. It is, for the time being, to solicit advice from my betters in the
 Racket community. It is for that same reason I've not published it to the Racket
-package repository, plus I'd hate to cause fragmentation where you, the user, has
+package repository, plus I'd hate to cause fragmentation where you, the user, have
 tough time picking among the libraries that do more or less the same thing.
 
 Simplest thing you can do is clone this repo and install it locally:
@@ -180,6 +180,7 @@ beautiful ~syntax-parse~ and friends:
   ;; note that bound ~id is not treated as a hole so isn't replaced
   (check-equal? '(6 1) (let ((~foo 1))
                          (list (~> 2
+                                   ;; with LHS takes a match pattern
                                    #:with (list a b) (list ~foo ~)
                                    (+ ~foo ~ a b))
                                ~foo)))
@@ -189,6 +190,8 @@ beautiful ~syntax-parse~ and friends:
                            #:when (even? ~) (set! num (sub1 num))
                            (list num ~)))
 #+end_src
+
+Note that ~#:with~ keyword allows a ~match~ pattern in its LHS.
 
 _~>_ is implicitly wrapped in an escape continuation bound to _<~_, so you can cut
 your thread short at any time and return any intermediate result:
