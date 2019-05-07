@@ -340,6 +340,11 @@
   (check-eq? ((lambda~> ~args (cdr ~) (last ~)) 1 2 3) 3))
 
 
+;; TODO somewhat crazy and probably redundant idea is to treat ~predicate? (tilda
+;; ids that end in ?) as predicates to be tested against the value, having checked
+;; they are indeed bound. Cheap "contract" hack. Is it even useful?
+
+
 ;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
 ;; need them, though. Only decent syntactic solution I can think of is to have
 ;; three macros: ~ ~> ~>>, but then how do I tell ~ as a hole from everything

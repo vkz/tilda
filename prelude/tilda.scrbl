@@ -24,7 +24,10 @@
           [hole ~
                 ~id]
           [thread-option (code:line #:with pat expr/hole)
-                         (code:line #:do (expr/hole ...))]
+                         (code:line #:do (expr/hole ...))
+                         (code:line #:as id)
+                         (code:line #:when expr/hole expr/hole)
+                         (code:line #:unless expr/hole expr/hole)]
           [expr/hole (pre-expr ... hole post-expr ...)
                      (expr ...)
                      expr])]{
