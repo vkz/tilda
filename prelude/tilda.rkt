@@ -294,7 +294,8 @@
 
     ((_ header:function-header clause ...)
      #:with (_ ... param:~ _ ...) #'header.params
-     #'(define header (~> param clause ...)))))
+     #:with thread (fix-outer/ctx #'(~> param clause ...))
+     #'(define header thread))))
 
 
 (define-syntax lambda~>
@@ -306,7 +307,8 @@
 
     ((_ header:formals clause ...)
      #:with (_ ... param:~ _ ...) #'header.params
-     #'(lambda header (~> param clause ...)))))
+     #:with thread (fix-outer/ctx #'(~> param clause ...))
+     (fix-outer/ctx #'(lambda header thread)))))
 
 
 (module+ test
@@ -338,6 +340,22 @@
 
   (check-eq? ((lambda~> (a b . ~rest) (map add1 ~) (list* ~) (last ~)) 1 2 3 4) 5)
   (check-eq? ((lambda~> ~args (cdr ~) (last ~)) 1 2 3) 3))
+
+
+(module+ test
+  (test-case "Use #%app from macro invocation context"
+    (check-equal? (let-syntax ([#%app (syntax-rules () [(_ . rest) (list . rest)])])
+                    (~> 1 (2 ~) (3 ~)))
+                  '(3 (2 1)))
+
+    (let ([->proc (λ (x) (if (symbol? x) (λ (hsh) (hash-ref hsh x)) x))]
+          [h (hasheq 'x (hasheq 'y 1))])
+      (let-syntax ([#%app (syntax-rules () [(_ x . rest) (#%app (->proc x) . rest)])])
+        (define~> (getxy ~h) ('x ~) ('y ~))
+
+        (check-equal? (~> h ('x ~) ('y ~)) 1)
+        (check-equal? ((lambda~> (~h) ('x ~) ('y ~)) h) 1)
+        (check-equal? (getxy h) 1)))))
 
 
 ;; TODO somewhat crazy and probably redundant idea is to treat ~predicate? (tilda
