@@ -50,7 +50,7 @@
 (define-syntax ~>
   (syntax-parser
     ((_ clauses ...)
-     #:with <~ (syntax-local-introduce #'<~)
+     #:with <~ (datum->syntax this-syntax '<~)
      #:with body (fix-outer/ctx #'(impl~> clauses ...))
      #'(let/ec <~ body))))
 
