@@ -37,11 +37,22 @@
     (and top-level-or-unbound
          not-top-level-bound))
 
-  (define (~id? stx)
-    (regexp-match #px"^~" (symbol->string (syntax-e stx))))
+  (define (~pred? stx)
+    (match (symbol->string (syntax-e stx))
+      ((regexp #px"^~(.*[?])$" (list _ pred)) (datum->syntax stx (string->symbol pred) stx))
+      (else #f)))
 
-  (define-syntax-class ~
-    (pattern id:id #:when (and (~id? #'id) (unbound? #'id)))))
+  (define (~id? stx)
+    (and (regexp-match #px"^~" (symbol->string (syntax-e stx)))
+         (not (~pred? stx))))
+
+  (define-syntax-class hole
+    (pattern hole:id
+             #:attr pred (~pred? #'hole)
+             #:when (and (attribute pred) (unbound? #'hole)))
+    (pattern hole:id
+             #:when (and (~id? #'hole) (unbound? #'hole))
+             #:attr pred #f)))
 
 
 ;;* ~> -------------------------------------------------------------- *;;
@@ -66,11 +77,13 @@
 (define-syntax (impl~> stx)
 
   (define-syntax-class clause
-    #:attributes ((pre 1) hole (post 1))
-    (pattern (pre ... hole:~ post ...))
+    #:attributes ((pre 1) hole pred (post 1))
+    (pattern (pre ... hole:hole post ...)
+             #:attr pred (attribute hole.pred))
     (pattern (pre ...)
              #:with (post ...) #'()
-             #:attr hole #f))
+             #:attr hole #f
+             #:attr pred #f))
 
   (define-syntax-class (do-expr val)
     (pattern c:clause #:when (attribute c.hole)
@@ -80,7 +93,7 @@
              #:with subst #'e))
 
   (define-syntax-class (with-rhs val)
-    (pattern id:~ #:with subst (fix-outer/ctx val val #'id))
+    (pattern id:hole #:with subst (fix-outer/ctx val val #'id))
     (pattern (~var e (do-expr val)) #:with subst #'e.subst))
 
   (define kw-table
@@ -143,9 +156,18 @@
                                          this-syntax)
      (fix-outer/ctx #'(begin (define val e) options ... body)))
 
-    ;; clause with a hole
+    ;; clause with ~pred? hole
     ((_ e:expr c:clause rest ...)
-     #:when (attribute c.hole)
+     #:when (attribute c.pred)
+     #:with val #'val
+     #:with clause/e (fix-outer/ctx this-syntax #'(c.pre ... val c.post ...) #'c)
+     (fix-outer/ctx #'(begin (define val e)
+                             (unless (c.pred val) (return #f))
+                             (impl~> clause/e rest ...))))
+
+    ;; clause with ~id hole
+    ((_ e:expr c:clause rest ...)
+     #:when (and (attribute c.hole) (not (attribute c.pred)))
      #:with clause/e (fix-outer/ctx this-syntax #'(c.pre ... e c.post ...) #'c)
      (fix-outer/ctx #'(impl~> clause/e rest ...)))
 
@@ -303,8 +325,14 @@
                            (~> ~
                                #:as foo
                                (cons 2 (<~ foo)))
-                           (cons 3 ~))))
+                           (cons 3 ~)))
 
+  ;; ~pred?
+  (check-eq? (~> 42 (+ 1 ~number?)) 43)
+  (check-false (~> 'foo (+ 1 ~number?)))
+  (check-exn #rx"foo\\?: unbound identifier" (thunk
+                                              (convert-compile-time-error
+                                               (~> 42 (+ 1 ~foo?))))))
 
 ;;* define~> and lambda~> ------------------------------------------- *;;
 
@@ -322,12 +350,12 @@
     ;; ~ unbound so it can be used as a marker in the body, sadly I don't yet know
     ;; how to manipulate scopes appropriately.
     ((_ header:function-header clause ...)
-     #:with (_ ... param:~ _ ...) #'header.params
+     #:with (_ ... param:hole _ ...) #'header.params
      #:when (eq? (syntax-e #'param) '~)
      (hole-bound-error 'define~> #'param))
 
     ((_ header:function-header clause ...)
-     #:with (_ ... param:~ _ ...) #'header.params
+     #:with (_ ... param:hole _ ...) #'header.params
      #:with thread (fix-outer/ctx #'(~> param clause ...))
      #'(define header thread))))
 
@@ -335,12 +363,12 @@
 (define-syntax lambda~>
   (syntax-parser
     ((_ header:formals clause ...)
-     #:with (_ ... param:~ _ ...) #'header.params
+     #:with (_ ... param:hole _ ...) #'header.params
      #:when (eq? (syntax-e #'param) '~)
      (hole-bound-error 'lambda~> #'param))
 
     ((_ header:formals clause ...)
-     #:with (_ ... param:~ _ ...) #'header.params
+     #:with (_ ... param:hole _ ...) #'header.params
      #:with thread (fix-outer/ctx #'(~> param clause ...))
      (fix-outer/ctx #'(lambda header thread)))))
 

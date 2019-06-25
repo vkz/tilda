@@ -73,9 +73,10 @@ so we don't have to do intermediate #:as binding e.g.
 We'll have to recognize clauses like that and lift ~ value so we don't recompute
 for every ~.
 
-** TODO short circuit ~> [1/2]
-SCHEDULED: <2019-06-25 Tue>
+** DONE short circuit ~> [2/2]
+CLOSED: [2019-06-25 Tue 17:57] SCHEDULED: <2019-06-25 Tue>
 
+- State "DONE"       from "TODO"       [2019-06-25 Tue 17:57]
 *** DONE #:when and #:unless to take predicate and escape value
 CLOSED: [2019-06-25 Tue 16:05] SCHEDULED: <2019-06-25 Tue>
 - State "DONE"       from "STARTED"    [2019-06-25 Tue 16:05] \\
@@ -95,8 +96,14 @@ an error.
 Because we can report errors here, there is no longer any need to #:guard, so
 we'll drop it.
 
-*** TODO treat ~pred? to short circuit unless (pred? ~)
-SCHEDULED: <2019-06-25 Tue>
+*** DONE treat ~pred? to short circuit unless (pred? ~)
+CLOSED: [2019-06-25 Tue 17:56] SCHEDULED: <2019-06-25 Tue>
+- State "DONE"       from "STARTED"    [2019-06-25 Tue 17:56] \\
+  seems to work
+- State "STARTED"    from "TODO"       [2019-06-25 Tue 16:37]
+:LOGBOOK:
+CLOCK: [2019-06-25 Tue 16:37]--[2019-06-25 Tue 17:56] =>  1:19
+:END:
 
 Technically #:when and #:unless suffice, but they stand out and require the 2nd
 argument as the value to escape with. Typically we just want to return #f (the
