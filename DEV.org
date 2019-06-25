@@ -1,0 +1,62 @@
+TILDA  -*- mode: org; fill-column: 82 -*-
+#+CATEGORY: tilda
+#+STARTUP: content
+#+seq_todo: TODO STARTED(s@/@) WAITING(w@/@) DELEGATED(l@/@) APPT | DONE(d@/@) DEFERRED(f@/@) CANCELLED(x@/@) IDEA(i/@)
+#+TAGS: { SCHOOL(s) BLOG(b) TIL(t) }
+#+PROPERTY: Effort_ALL 0 0:10 0:30 1:00 2:00 3:00 4:00 5:00 6:00 7:00
+#+COLUMNS: %40ITEM(Task) %17Effort(Estimated Effort){:} %CLOCKSUM
+
+* Tilda
+
+** DONE move tilda out of prelude
+CLOSED: [2019-06-25 Tue 10:23] SCHEDULED: <2019-06-25 Tue>
+- State "DONE"       from "STARTED"    [2019-06-25 Tue 10:23] \\
+  tilda now resides in its own single collection package
+- State "STARTED"    from "TODO"       [2019-06-25 Tue 09:57]
+:LOGBOOK:
+CLOCK: [2019-06-25 Tue 09:57]--[2019-06-25 Tue 10:23] =>  0:26
+:END:
+
+** CANCELLED allow table syntax
+CLOSED: [2019-06-25 Tue 06:38] SCHEDULED: <2019-06-24 Mon>
+
+- State "CANCELLED"  from "TODO"       [2019-06-25 Tue 06:38] \\
+  Now that I think about it, the feature doesn't make any sense. When threading all
+  it takes to mimic the same semantics is to add an extra key lookup step. With the
+  two : and :: procedures that I now have both table and key could be computed.
+~:key
+~.key
+~::key
+~..key
+
+t:~
+t.~
+t::~
+t..~
+
+also undefined aware versions
+
+~:key?
+~.key?
+~::key?
+~..key?
+
+t:~?
+t.~?
+t::~?
+t..~?
+
+don't forget that ~id is also possible
+
+** TODO short circuit on #f and undefined
+SCHEDULED: <2019-06-25 Tue>
+
+We could provide a special form for that like and~> or ?~>, but maybe even better
+we could simply leverage ~ syntax:
+#+begin_src racket
+  (~> t
+      (get ~? :foo)
+      (get ~table? :bar))  
+#+end_src
+where ? at the end of ~id tells tilda to escape with that value when value is #f
+or undefined.

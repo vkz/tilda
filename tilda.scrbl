@@ -2,18 +2,18 @@
 
 @(require (for-label racket/base
                      racket/math
-                     prelude/tilda)
+                     tilda)
           scribble/eval)
 
 @(define eval~>
-   (make-eval-factory '(prelude/tilda
+   (make-eval-factory '(tilda
                         racket/function
                         racket/list
                         racket/math)))
 
 @title{Threading with tildas}
 
-@defmodule[prelude/tilda]
+@defmodule[tilda]
 
 @defform[#:literals (~ ~foo ~id)
          (~> expr clause ...)

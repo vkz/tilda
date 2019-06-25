@@ -1,3 +1,3 @@
 #lang info
 
-(define collection 'multi)
+(define scribblings '(("tilda.scrbl" ())))
