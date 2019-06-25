@@ -48,15 +48,70 @@ t..~?
 
 don't forget that ~id is also possible
 
-** TODO short circuit on #f and undefined
+** TODO consider replacing all occurrences of ~ in clauses
+
+so we don't have to do intermediate #:as binding e.g.
+#+begin_src racket
+  ;; atm have to write this
+  (~> '()
+      (cons 1 ~)
+      (~> ~
+          #:as a
+          #:when list? a
+          (cons 2 ~))
+      (cons 3 ~))
+
+  ;; but I'd rather write this
+  (~> '()
+      (cons 1 ~)
+      (~> ~
+          #:when list? ~
+          (cons 2 ~))
+      (cons 3 ~))
+#+end_src
+
+We'll have to recognize clauses like that and lift ~ value so we don't recompute
+for every ~.
+
+** TODO short circuit ~> [1/2]
 SCHEDULED: <2019-06-25 Tue>
 
-We could provide a special form for that like and~> or ?~>, but maybe even better
-we could simply leverage ~ syntax:
+*** DONE #:when and #:unless to take predicate and escape value
+CLOSED: [2019-06-25 Tue 16:05] SCHEDULED: <2019-06-25 Tue>
+- State "DONE"       from "STARTED"    [2019-06-25 Tue 16:05] \\
+  Wow. I found use for both ~syntax-parameter~ and ~make-rename-transformer~!
+- State "STARTED"    from "TODO"       [2019-06-25 Tue 15:08]
+:LOGBOOK:
+CLOCK: [2019-06-25 Tue 15:08]--[2019-06-25 Tue 16:05] =>  0:57
+:END:
+
+dealing with expression in the first position for these is awkward. We pretty much
+always want to test something (probably ~) and either escape or report an error.
+
+Most common escape value is probably just #f. Otherwise its an expression to
+compute the value used as the resurt of the entire ~>. Could just as easily throw
+an error.
+
+Because we can report errors here, there is no longer any need to #:guard, so
+we'll drop it.
+
+*** TODO treat ~pred? to short circuit unless (pred? ~)
+SCHEDULED: <2019-06-25 Tue>
+
+Technically #:when and #:unless suffice, but they stand out and require the 2nd
+argument as the value to escape with. Typically we just want to return #f (the
+Racket default in such cases). Hence this syntactic convenience:
 #+begin_src racket
   (~> t
       (get ~? :foo)
-      (get ~table? :bar))  
+      (get ~table? :bar))
+
+  ;; equivalent to =>
+
+  (~> t            #:unless ? #f
+      (get ~ :foo) #:unless table? #f
+      (get ~ :bar))
 #+end_src
-where ? at the end of ~id tells tilda to escape with that value when value is #f
-or undefined.
+
+note that ~id e.g. ~table are treated normally not as predicates to be checked
+therefore they serve as reading aids.

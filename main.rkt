@@ -47,12 +47,20 @@
 ;;* ~> -------------------------------------------------------------- *;;
 
 
+(require racket/stxparam)
+
+
+(define-syntax-parameter return #f)
+
+
 (define-syntax ~>
   (syntax-parser
     ((_ clauses ...)
      #:with <~ (datum->syntax this-syntax '<~)
      #:with body (fix-outer/ctx #'(impl~> clauses ...))
-     #'(let/ec <~ body))))
+     #'(let/ec <~
+         (syntax-parameterize ((return (make-rename-transformer #'<~)))
+           body)))))
 
 
 (define-syntax (impl~> stx)
@@ -76,8 +84,7 @@
     (pattern (~var e (do-expr val)) #:with subst #'e.subst))
 
   (define kw-table
-    (list (list '#:guard check-expression)
-          (list '#:do check-expression)
+    (list (list '#:do check-expression)
           (list '#:when check-expression check-expression)
           (list '#:unless check-expression check-expression)
           (list '#:with check-expression check-expression)
@@ -102,22 +109,16 @@
          (fix-outer/ctx ctx #'(begin e.subst ...)))
 
         ((list #:when ctx lhs rhs)
-         (define/syntax-parse (~var test (with-rhs value)) lhs)
+         (define/syntax-parse val value)
+         (define/syntax-parse pred lhs)
          (define/syntax-parse (~var consequent (with-rhs value)) rhs)
-         (fix-outer/ctx ctx #'(when test.subst consequent.subst)))
+         (fix-outer/ctx ctx #'(when (pred val) (return consequent.subst))))
 
         ((list #:unless ctx lhs rhs)
-         (define/syntax-parse (~var test (with-rhs value)) lhs)
+         (define/syntax-parse val value)
+         (define/syntax-parse pred lhs)
          (define/syntax-parse (~var consequent (with-rhs value)) rhs)
-         (fix-outer/ctx ctx #'(unless test.subst consequent.subst)))
-
-        ;; TODO I'm really hating this, either make error message helpful e.g. by
-        ;; installing a contract boundary between clauses or ditch this thing. See
-        ;; with-contract, invariant-assertion or maybe define/contract. I'd have
-        ;; to fix blame object somehow. Are guards even useful here?
-        ((list #:guard ctx guard)
-         (with-syntax ((error (fix-outer/ctx ctx #`(error "guard failed") prev-clause)))
-           (fix-outer/ctx guard #`(unless (#,guard #,value) error))))
+         (fix-outer/ctx ctx #'(unless (pred val) (return consequent.subst))))
 
         ((list-rest kw ctx _)
          (raise-syntax-error #f (format "unexpected keyword ~a" kw) ctx ctx))))
@@ -263,13 +264,46 @@
                                          (* 2 ~)))
 
   (check-eq? 6 (~> 6
-                   #:unless (odd? ~) (<~ ~)
+                   #:unless odd? ~
                    (range 1 ~)))
 
   (check-equal? '(5 6) (~> 6
                            #:as num
-                           #:when (even? ~) (set! num (sub1 num))
-                           (list num ~))))
+                           #:when even? (list 5 ~)
+                           (list num ~)))
+
+  ;; these test two things:
+  ;;   (a) nested ~>
+  ;;   (b) nested escapes with <~
+  (check-equal? '(3 1) (~> '()
+                           (cons 1 ~)
+                           (~> ~
+                               #:as a
+                               #:when list? a
+                               (cons 2 ~))
+                           (cons 3 ~)))
+
+  ;; TODO consider replacing all occurrences of ~ in a clause. Until then we have
+  ;; to bind with #:as as in the test case above instead of writing:
+  #;(~> '()
+        (cons 1 ~)
+        (~> ~
+            #:when list? ~
+            (cons 2 ~))
+        (cons 3 ~))
+
+  (check-equal? '(3 2 1) (~> '()
+                             (cons 1 ~)
+                             (~> ~
+                                 (cons 2 ~))
+                             (cons 3 ~)))
+
+  (check-equal? '(3 1) (~> '()
+                           (cons 1 ~)
+                           (~> ~
+                               #:as foo
+                               (cons 2 (<~ foo)))
+                           (cons 3 ~))))
 
 
 ;;* define~> and lambda~> ------------------------------------------- *;;
@@ -318,7 +352,7 @@
     (list* b c ~)
     #:as all
     (last ~)
-    #:when (even? ~) (<~ 'even)
+    #:when even? 'even
     (+ ~ (car all)))
 
   (check-eq? ((foo~> 0 1) 2 #:c 3) 3)
@@ -356,11 +390,6 @@
         (check-equal? (~> h ('x ~) ('y ~)) 1)
         (check-equal? ((lambda~> (~h) ('x ~) ('y ~)) h) 1)
         (check-equal? (getxy h) 1)))))
-
-
-;; TODO somewhat crazy and probably redundant idea is to treat ~predicate? (tilda
-;; ids that end in ?) as predicates to be tested against the value, having checked
-;; they are indeed bound. Cheap "contract" hack. Is it even useful?
 
 
 ;; TODO easy to implement standard ~> and ~>> in terms of my ~>, not sure I really
