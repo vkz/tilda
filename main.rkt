@@ -139,6 +139,10 @@
     (for/list ((opt (in-list options)))
       (opt->stx opt)))
 
+  (define (options->keywords options)
+    (for/hasheq ((o (in-list options)))
+      (match o ((list kw _ ...) (values kw #t)))))
+
   (syntax-parse stx
 
     ;; no more clauses
@@ -149,11 +153,21 @@
      #:do ((define-values (options clauses) (parse-keyword-options
                                              #'rest kw-table
                                              ;; report errors in terms of ~>
-                                             #:context #'(~> e . rest))))
+                                             #:context #'(~> e . rest)))
+           ;; #:as suspends threading and binds identifier to current
+           ;; ~, threading restarts with the following clause value
+           (define suspend-threading?
+             (hash-ref (options->keywords options) '#:as (λ () #f))))
      #:with (clause ...) clauses
-     #:with body (fix-outer/ctx #'(impl~> val clause ...))
      #:with (options ...) (datum->syntax this-syntax (options->syntaxes #'e #'val options)
                                          this-syntax)
+     #:with body (if suspend-threading?
+                     ;; restart from the following clause that must
+                     ;; not have ~ anywhere, use #:as bound val
+                     (fix-outer/ctx #'(impl~> clause ...))
+                     ;; keep threading
+                     (fix-outer/ctx #'(impl~> val clause ...)))
+     ;; prepend parsed options and keep threading
      (fix-outer/ctx #'(begin (define val e) options ... body)))
 
     ;; clause with ~pred? hole
@@ -171,11 +185,13 @@
      #:with clause/e (fix-outer/ctx this-syntax #'(c.pre ... e c.post ...) #'c)
      (fix-outer/ctx #'(impl~> clause/e rest ...)))
 
-    ;; clause with no holes
+    ;; clause with no holes, assume thread first
     ((_ e:expr c:clause rest ...)
      #:when (not (attribute c.hole))
-     #:with clause (fix-outer/ctx this-syntax #'(c.pre ... c.post ...) #'c)
-     (fix-outer/ctx #'(begin e (impl~> clause rest ...))))))
+     #:with (pre crest ...) #'c
+     ;; thread first
+     #:with clause (fix-outer/ctx this-syntax #'(pre e crest ...) #'c)
+     (fix-outer/ctx #'(impl~> clause rest ...)))))
 
 
 (module+ test
@@ -191,9 +207,8 @@
   (check-eq? (~> 'foo
                  (symbol->string ~)
                  (format ":~a" ~str)
-                 ;; threading can be split by expr that ignores the result
                  (list 42)
-                 (car ~))
+                 (second ~))
              42)
 
   ;; exn: symbol->string: contract violation
@@ -278,9 +293,9 @@
   ;; #:as and short-circuit with or
   (check-equal? (list 6 (range 1 6)) (~> 6
                                          #:as upper-limit
-                                         (range 1 ~)
+                                         (range 1 upper-limit)
                                          #:as seq
-                                         (filter odd?  ~)
+                                         (filter odd? seq)
                                          (findf even? ~)
                                          (or ~num (<~ (list upper-limit seq)))
                                          (* 2 ~)))
@@ -292,7 +307,7 @@
   (check-equal? '(5 6) (~> 6
                            #:as num
                            #:when even? (list 5 ~)
-                           (list num ~)))
+                           (list num num)))
 
   ;; these test two things:
   ;;   (a) nested ~>
@@ -302,7 +317,7 @@
                            (~> ~
                                #:as a
                                #:when list? a
-                               (cons 2 ~))
+                               (cons 2 a))
                            (cons 3 ~)))
 
   ;; TODO consider replacing all occurrences of ~ in a clause. Until then we have
@@ -326,6 +341,13 @@
                                #:as foo
                                (cons 2 (<~ foo)))
                            (cons 3 ~)))
+
+  ;; #:as lets us thread any forms e.g. if, when, cond, let
+  (check-equal? '(0 1 2 3) (~> 0 #:as a
+                               (let* ((b 1)) (list b a))
+                               (cons 2 ~) #:as l
+                               (if #t (cons 3 l) l)
+                               (reverse)))
 
   ;; ~pred?
   (check-eq? (~> 42 (+ 1 ~number?)) 43)
@@ -379,7 +401,7 @@
   (define~> ((foo~> . ~arg) b #:c [c 3])
     (list* b c ~)
     #:as all
-    (last ~)
+    (last all)
     #:when even? 'even
     (+ ~ (car all)))
 
