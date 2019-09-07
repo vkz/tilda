@@ -2,20 +2,19 @@
 
 * Motivation
 
-[[#examples][Skip to Examples]]
+[[#features][Skip to features and examples]]
 
-~tilda~ package implements the so called *threading* macro that simply lets you
-compose function invocations left-to-right from the first one to compute, then the
-next one that uses the result from the first, and so on. Contrast this with the
-typical way you would have to nest your function calls in a Lisp of your choice.
+~tilda~ package implements the so called *threading* macro that lets
+you compose function invocations left-to-right from the first one to
+compute, then the next that uses the result from the first, and so on.
+Contrast this with the typical way you would have to nest your
+function calls in a Lisp of your choice assuming eager execution:
 
 #+begin_src racket
-  ;; typically you would have to write something like this, where assuming eager
-  ;; execution semantics range would compute first, then filter, then map, and
-  ;; finally apply.
   (apply + (map add1 (filter odd? (range 1 6))))
 
-  ;; threading macro lets you express the same computation in a more natural order
+  ;; vs
+
   (~> 6
       (range 1 ~)
       (filter odd?  ~)
@@ -23,234 +22,166 @@ typical way you would have to nest your function calls in a Lisp of your choice.
       (apply + ~))
 #+end_src
 
-In the above example the latter expands exactly into the former expression.
+Popularized by Clojure the macro typically comes in three flavors:
+- ~->~ or "thread first" propagates the value as the first argument in
+  the following clause,
+- ~->>~ or "thread last" threads the result as the last argument,
+- ~as->~ generalizes the above forms by explicitly binding threaded
+  values to a user picked identifier.
 
-Popularized by Clojure threading macros typically come in three flavors ~->~
-propagates result as the first argument in the following clause, ~->>~ threads the
-result as the last argument and there's usually the third macro that lets you
-assign the hole-marker - identifier to be replaced in each clause.
+Since ~->~ has already been taken for contract declarations, Racket
+usually picks /tilda-arrow/ in place of /dash-arrow/. That is to
+readily admit this isn't the first Racket package to provide threading
+macros. If you want a battle-tested threading library I suggest
+installing *Alexis King's* [[https://github.com/lexi-lambda/threading][threading]] or *Greg Hendershott's* [[https://github.com/greghendershott/rackjure][rackjure]]
+which also comes with other Clojure inspired goodies. You can't go
+wrong with either of them.
 
-Since ~->~ has already been taken for contract declarations, Racket usually uses
-/tilda/ to name the same macros. That is to readily admit this isn't the first
-Racket package to provide threading macros. If you want battle tested threading
-library I suggest installing *Alexis King's* [[https://github.com/lexi-lambda/threading][threading]]. I believe *Greg
-Hendershott's* [[https://github.com/greghendershott/rackjure][rackjure]] also ships them and comes with a lot of goodies
-popularized by Clojure. You can't go wrong with either of them.
-
-This implementation is merely a reflection of my taste when it comes to threading
-as well as a decent exercise in Racket /macrology/. If you are new to Racket,
-rolling out your own pre- and post-threading macros is a really good exercise, one
-that you could push even further, as I have, and take Racket's rich macro-system
-for a test drive.
-
-Speaking of taste:
-- I find /naked/ function-id clauses, although sometimes cleaner, mostly
-  inconsintent and really prefer to have every clause wrapped in parenthesis,
-- ~->~ and ~->>~ macros are awkward to use when some of the clauses need to take
-  the first argument, while others expect the last; if you start with ~->~, then
-  find you need to switch to post-threading you could simply use ~->>~ as a clause
-  in its own right, sadly the same trick doesn't work the other way; this is when
-  you would normally consider explicitly naming your hole-marker; I say this ought
-  to be the default;
-- sometimes you want to perform intermediate computation to use in the clauses
-  further along; at this point you have no choice but to split the threading; I
-  think we could allow binding declarations between clauses.
-
-So, the threading macro in ~tilda~ does exactly those things.
-
-#+begin_quote
-I sincerely invite _veteran Racketeers_ to suggest improvements to my macro code.
-To a large extend this is an exercise, after all.
-#+end_quote
+Present implementation reflects my idiosyncratic aesthetic and
+requirements. If you are new to Racket, rolling out your own threading
+macros makes for an exceptional exercise in /macrology/.
 
 * Installation
 
-~tilda~ package although appears seperate here is part of the ~prelude~ collection
-that is in heavy development atm and has not been released, yet. Once ~prelude~ is
-in good enough shape to be published ~tilda~ may or may not remain a separate
-package. It is, for the time being, to solicit advice from my betters in the
-Racket community. It is for that same reason I've not published it to the Racket
-package repository, plus I'd hate to cause fragmentation where you, the user, have
-tough time picking among the libraries that do more or less the same thing.
-
-Simplest thing you can do is clone this repo and install it locally:
-
+Install it from Racket Packages:
 #+begin_src shell
 cd tilda
 raco pkg install -u
 #+end_src
 
-which will link the cloned directory from your local Racket installation. This
-will also let you hack on the library and have your changes propagate to wherever
-you require ~tilda~ (most of the time). Assuming you've forked the repo you can
-also easily send pull requests via Github interface.
+Or clone and install from the local check-out:
+#+begin_src shell
+  git clone https://github.com/vkz/tilda.git
+  cd tilda
+  raco pkg install -u
+#+end_src
 
-You can also do the entire clone, install, link dance in one go by passing
-~--clone~ to ~raco~. Please consult [[https://docs.racket-lang.org/pkg/git-workflow.html][the docs here]].
+You can also do the entire clone, install, link dance in one go by
+passing ~--clone~ to ~raco~. Please consult [[https://docs.racket-lang.org/pkg/git-workflow.html][the Racket docs here]].
 
-#+begin_quote
-Knowing that in no way this README can replace proper Racket documentation I
-kindly ask the reader to make do for the time being as I learn how to scribble my
-way to perfection. Apologies.
-#+end_quote
-
-* Examples
+* Features
 :PROPERTIES:
-:CUSTOM_ID: examples
+:CUSTOM_ID: features
 :END:
-
-** _~>_ macro
 
 #+begin_example
 
-(~> expr clause ...)
+  (~> expr clause ...)
 
-       clause = thread-option
-              | (expr ...)
-              | (pre-expr ... hole post-expr ...)
+          clause = keyword-clause
+                 | (expr ...)
+                 | (pre-expr ... hole post-expr ...)
 
-         hole = ~
-              |~id
+            hole = ~
+                 | ~id
+                 | ~id?
 
-thread-option = #:with pat expr/hole
-              | #:do (expr/hole ...)
-              | #:as id
-              | #:when expr/hole expr/hole
-              | #:unless expr/hole expr/hole
+  keyword-clause = #:with pat expr/hole
+                 | #:do (expr/hole ...)
+                 | #:as id
+                 | #:when predicate expr/hole
+                 | #:unless predicate expr/hole
 
-    expr/hole = (pre-expr ... hole post-expr ...)
-              | (expr ...)
-              | expr
+       expr/hole = (pre-expr ... hole post-expr ...)
+                 | (expr ...)
+                 | expr
 
 #+end_example
 
-Every clause must be wrapped in parenthesis and explicit hole-marker needs to be
-supplied unless you want to ignore the result of the previous clause, which you
-can do. Omitting a hole amounts to starting to thread from the current clause,
-however any bindings created with keyword /thread-options/ would persist for the
-dynamic extent of the entire _~>_ computation.
+Typically the position where to insert (or "thread" through) the value
+is marked with _~_. Clauses without a marker are treated as "thread
+first", that is the threaded value will be inserted as the first
+argument.
+
+Any unbound identifier that starts with tilda can be a hole-marker, so
+you can use either _~_ or _~num_ to mark the position to thread
+through. The latter communicates what kind of value is being threaded
+and makes for a more readable code.
+
+Hole-markers of the form _~id?_ that end in ? are treated as
+predicates to be checked before threading continues. Unless _(id? ~)_
+is true, computation short circuits returning _#f_ as the result of
+the entire threading form. Keyword-clauses ~#:when~ and ~#:unless~
+allow for a more expressive way to guard and short-circuit
+computation.
+
+Every threading form is implicitly wrapped in an escape continuation,
+which can be triggered with _<~_. That is, _(<~ 42)_ anywhere will
+escape making 42 the result of the entire threading form.
+
+/keyword-clauses/ let you change the semantics right in the middle of
+threading. Any bindings they introduce are available in subsequent
+clauses.
+
+** #:as id
+
+bind the value being threaded to ~id~ and suspend threading for the
+next clause, restart threading in subsequent clauses. Such behavior
+effectively restarts threading with a new value and accommodates forms
+like ~if~, ~cond~, ~let~ etc to compute said value:
 
 #+begin_src racket
-  (require prelude/tilda
-           rackunit)
-
-  (check-eq? (~> 'foo
-                 (symbol->string ~)
-                 (format ":~a" ~str)
-                 (string->symbol ~))
-             ':foo)
-
-  (check-eq? (~> 'foo
-                 (symbol->string ~)
-                 (format ":~a" ~str)
-                 ;; threading can be split by expr that ignores the result
-                 (list 42)
-                 (car ~))
-             42)
+  (~> (random 42)
+      #:as v
+      (cond
+        ((even? v) v)
+        ((odd? v) (add1 v)))
+      (/ 2)
+      (format "Half of ~s is ~s" v ~))
 #+end_src
 
-Notice, that any unbound identifier that starts with tilda can be a hole-marker,
-so you can use either _~_ or e.g. _~key_ interchangably, with the latter simply
-hinting to the reader of your code what sort of thing it's supposed to be, making
-hole-markers essentially self-documenting.
+** #:when predicate expr/hole
 
-You can interleave clauses with /thread-options/ that let you perform and bind
-intermediate computations so that you may avoid having to split your /thread/ just
-to ~let~-bind something. This is of course nothing new to someone who's used
-beautiful ~syntax-parse~ and friends:
+short circuit threading when _(predicate ~)_ is true and return the
+value of _expr/hole_:
 
 #+begin_src racket
-  (check-equal? (~> 'foo
-                    (symbol->string ~)
-                    #:with bar "-bar"
-                    #:with baz "-baz"
-                    (string-append ~foo bar baz)
-                    (format ":~a" ~str)
-                    (string->symbol ~)
-                    #:do ((define l (list 1 2))
-                          (set! l (cons 0 l)))
-                    (cons ~sym l))
-                '(:foo-bar-baz 0 1 2))
-
-  (check-equal? '(0 1 2) (~> 0
-                             #:do ((define foo ~))
-                             (add1 ~)
-                             #:do ((define bar ~))
-                             (add1 ~)
-                             (list foo bar ~)))
-
-  ;; note that bound ~id is not treated as a hole so isn't replaced
-  (check-equal? '(6 1) (let ((~foo 1))
-                         (list (~> 2
-                                   ;; with LHS takes a match pattern
-                                   #:with (list a b) (list ~foo ~)
-                                   (+ ~foo ~ a b))
-                               ~foo)))
-
-  (check-equal? '(5 6) (~> 6
-                           #:as num
-                           #:when (even? ~) (set! num (sub1 num))
-                           (list num ~)))
+  (~> 42
+      (random)
+      #:when even? ~
+      (add1))
 #+end_src
 
-Note that ~#:with~ keyword allows a ~match~ pattern in its LHS.
+** #:unless predicate expr/hole
 
-_~>_ is implicitly wrapped in an escape continuation bound to _<~_, so you can cut
-your thread short at any time and return any intermediate result:
+short circuit threading unless _(predicate ~)_ is true and return the
+value of _expr/hole_:
 
 #+begin_src racket
-  (check-eq? 6 (~> 6
-                   #:unless (odd? ~) (<~ ~)
-                   (range 1 ~)))
-
-  ;; #:as and short-circuit with or
-  (check-equal? (list 6 (range 1 6)) (~> 6
-                                         #:as upper-limit
-                                         (range 1 ~)
-                                         #:as seq
-                                         (filter odd?  ~)
-                                         (findf even? ~)
-                                         (or ~num (<~ (list upper-limit seq)))
-                                         (* 2 ~)))
+  (~> 42
+      (random)
+      #:unless odd? ~
+      (add1))
 #+end_src
 
-** _define~>_ and _lambda~>_ macros
+** #:with pat expr/hole
 
-~define~>~ lets you define functions whose body effectively threads whatever
-formal argument you specify as a hole-marker. Otherwise the grammar for its formal
-parameters is exactly that of Racket's ~define~. Note, however, that you may not
-use _~_ as a formal parameter, that is because hole-markers are required to be
-unbound but of course the whole point of function parameters is to bind them in
-the body:
+pattern-match on an expression with a hole, continue to thread with
+pattern variables bound in the following clauses:
 
 #+begin_src racket
-  ;; pick a parameter and prepend its name with ~ to thread its value in the body,
-  ;; you can use that argument in the body as usual, however it won't be treated as
-  ;; a hole-marker but as a bound identifier whose value will be used as expected
-  (define~> ((foo~> . ~arg) b #:c [c 3])
-    (list* b c ~)
-    #:as all
-    (last ~)
-    #:when (even? ~) (<~ 'even)
-    (+ ~ (car all)))
-
-  (check-eq? ((foo~> 0 1) 2 #:c 3) 3)
-  (check-eq? ((foo~> 0 1) 2) 3)
-  (check-eq? ((foo~> 0 2) 3) 'even)
-
-  ;; binding ~ however is not allowed
-  (check-exn #rx"attempt to bind hole-marker"
-             (thunk
-              (convert-compile-time-error
-               (lambda~> ~ (car ~)))))
-
-  (check-eq? ((λ~> (a b . ~rest) (map add1 ~) (list* ~) (last ~)) 1 2 3 4) 5)
-  (check-eq? ((λ~> ~args (cdr ~) (last ~)) 1 2 3) 3)
+  (~> "foo bar"
+      (string-split)
+      #:with (list foo bar) ~
+      (list* bar foo ~foobar))
+  ;; =>
+  '("bar" "foo" "foo" "bar")
 #+end_src
 
-#+begin_quote
-Being unable to use _~_ as a formal parameter above is somewhat unsatisfying. I
-could remedy that if I knew how to temporarily /disable/ its binding for the
-dynamic extent of the body, which, I believe, should be possible by manipulating
-its set of scopes. If you happen to know how to do this in Racket, do tell.
-#+end_quote
+** #:do (expr/hole ...)
+
+introduce implicit ~begin~ block to compute and bind interim values or
+perform side effects:
+
+#+begin_src racket
+  (check-equal? (~> 0
+                    #:do ((define foo ~) (printf "got ~s \n" foo))
+                    (add1 ~)
+                    #:do ((define bar ~) (printf "got ~s \n" bar))
+                    (add1 ~)
+                    (list foo bar ~))
+                '(0 1 2))
+  ;; =>
+  got 0
+  got 1
+#+end_src
