@@ -8,12 +8,26 @@ TILDA  -*- mode: org; fill-column: 82 -*-
 
 * Tilda
 
+** TODO Either netlify or publish docs on github.io
+
+- scrbl -> html
+- deploy to github pages or netlify
+- use fullmeta.me subdomain
+
+** TODO setup CI to auto-test and deploy docs
+
+travis?
+
+** TODO Publish tilda as Racket package
+
 ** TODO Document tilda.rkt
 
 *** TODO Scribble tilda.rkt
   [2019-06-26 Wed]
 
-*** TODO README.org for tilda.rkt
+*** DONE README.org for tilda.rkt
+CLOSED: [2019-09-08 Sun 13:48]
+- State "DONE"       from "TODO"       [2019-09-08 Sun 13:48]
   [2019-06-26 Wed]
 
 ** DONE default to thread first unless ~ is present
@@ -60,11 +74,6 @@ threading and lets us both restart and bind intermediate threaded values.
       (last a b ~))
 #+end_src
 
-** TODO use (match ~ clauses) as an example
-
-notice that Racket match is perfectly usable in a thread first position, should
-give in example in the docs to teach people
-
 ** DONE move tilda out of prelude
 CLOSED: [2019-06-25 Tue 10:23] SCHEDULED: <2019-06-25 Tue>
 - State "DONE"       from "STARTED"    [2019-06-25 Tue 10:23] \\
@@ -105,7 +114,8 @@ t..~?
 
 don't forget that ~id is also possible
 
-** TODO Consider replacing all occurrences of ~ in clauses
+** IDEA Consider replacing all occurrences of ~ in clauses
+CLOSED: [2019-09-08 Sun 13:48]
 
 so we don't have to do intermediate #:as binding e.g.
 #+begin_src racket
